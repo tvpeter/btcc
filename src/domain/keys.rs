@@ -21,19 +21,16 @@ pub fn generate_mnemonic() -> Result<Vec<&'static str>, anyhow::Error> {
 }
 
 pub fn restore_mnemonic(mnemonic: Vec<&'static str>) -> Result<Vec<&'static str>, anyhow::Error> {
-    if mnemonic.len() != 12
-        || mnemonic.len() != 15
-        || mnemonic.len() != 18
-        || mnemonic.len() != 21
-        || mnemonic.len() != 24
-    {
+    const VALID_MNEMONIC_LEN: &[usize] = &[12, 15, 18, 21, 24];
+
+    if !VALID_MNEMONIC_LEN.contains(&mnemonic.len()) {
         return Err(anyhow!("Invalid mnemonic length"));
     }
 
     Ok(mnemonic)
 }
 
-pub fn mnemonic_to_seed(
+pub fn mnemonic_to_descriptors(
     mnemonic: Vec<&'static str>,
     passphrase: Option<&str>,
 ) -> Result<(String, String), anyhow::Error> {
@@ -67,5 +64,24 @@ mod tests {
     fn test_generate_mnemonic() {
         assert!(generate_mnemonic().is_ok());
         assert_eq!(generate_mnemonic().unwrap().len(), 12);
+    }
+
+    #[test]
+    fn test_restore_mnemonic() {
+        let mnemonic: Vec<&str> = generate_mnemonic().unwrap();
+        assert!(restore_mnemonic(mnemonic.clone()).is_ok());
+        let restored_mnemonic = restore_mnemonic(mnemonic.clone()).unwrap();
+        assert_eq!(restored_mnemonic.len(), 12);
+        assert_eq!(restored_mnemonic, mnemonic)
+    }
+
+    #[test]
+    fn test_mnemonic_to_descriptors() {
+        let mnemonic: Vec<&str> = generate_mnemonic().unwrap();
+        let passphrase = "passphrase";
+        let (external_desc_priv, internal_desc_priv) =
+            mnemonic_to_descriptors(mnemonic.clone(), Some(passphrase)).unwrap();
+        assert!(external_desc_priv.contains("wpkh"));
+        assert!(internal_desc_priv.contains("wpkh"));
     }
 }
