@@ -1,18 +1,62 @@
 use anyhow::{anyhow, Result};
 use bdk_wallet::{
     bip39::{Language, Mnemonic},
+    bitcoin::{bip32::Xpriv, Network},
     keys::{bip39::WordCount, GeneratableKey, GeneratedKey},
     miniscript::Tap,
+    template::{Bip84, DescriptorTemplate},
+    KeychainKind,
 };
+
+const NETWORK: Network = Network::Testnet; // move it into config file
 
 pub fn generate_mnemonic() -> Result<Vec<&'static str>, anyhow::Error> {
     let mnemonic: GeneratedKey<_, Tap> =
         Mnemonic::generate((WordCount::Words12, Language::English))
             .map_err(|_| anyhow!("Error generating mnemonic"))?;
 
-    let words_array: Vec<&'static str> = mnemonic.words().collect();
+    let mnemonic_array: Vec<&'static str> = mnemonic.words().collect();
 
-    Ok(words_array)
+    Ok(mnemonic_array)
+}
+
+pub fn restore_mnemonic(mnemonic: Vec<&'static str>) -> Result<Vec<&'static str>, anyhow::Error> {
+    if mnemonic.len() != 12
+        || mnemonic.len() != 15
+        || mnemonic.len() != 18
+        || mnemonic.len() != 21
+        || mnemonic.len() != 24
+    {
+        return Err(anyhow!("Invalid mnemonic length"));
+    }
+
+    Ok(mnemonic)
+}
+
+pub fn mnemonic_to_seed(
+    mnemonic: Vec<&'static str>,
+    passphrase: Option<&str>,
+) -> Result<(String, String), anyhow::Error> {
+    let mut mnemonic_string = String::new();
+    for word in mnemonic {
+        mnemonic_string.push_str(word);
+        mnemonic_string.push(' ');
+    }
+
+    let restored_mnemonic = Mnemonic::parse(mnemonic_string)?;
+    let seed = restored_mnemonic.to_seed(passphrase.unwrap_or(""));
+
+    let xpriv = Xpriv::new_master(NETWORK, &seed)?;
+
+    let (external_descriptor, external_key_map, _) =
+        Bip84(xpriv, KeychainKind::External).build(NETWORK)?;
+    let (internal_descriptor, internal_key_map, _) =
+        Bip84(xpriv, KeychainKind::Internal).build(NETWORK)?;
+
+    let external_desc_priv = external_descriptor.to_string_with_secret(&external_key_map);
+    let internal_desc_priv = internal_descriptor.to_string_with_secret(&internal_key_map);
+
+    Ok((external_desc_priv, internal_desc_priv))
 }
 
 #[cfg(test)]
